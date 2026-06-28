@@ -22,6 +22,8 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 - Rule-based detection for token loggers, Minecraft session stealers, credential paths, IP grabbers, loaders, process execution, and obfuscation helpers.
 - Human-readable findings with category, severity, explanation, and evidence.
 - Manual GitHub Releases update check.
+- System-aware light/dark theme.
+- Risk meter with visible score thresholds.
 
 ## Updates
 
@@ -62,6 +64,22 @@ src/JarLens.App/bin/Release/net9.0-windows/win-x64/publish/
 ## Rule catalog
 
 Rules are stored as JSON files in `rules/`. See [docs/rule-format.md](docs/rule-format.md).
+
+## Risk scoring
+
+Each finding contributes points based on severity:
+
+- `Low`: 5 points
+- `Medium`: 15 points
+- `High`: 35 points
+- `Critical`: 60 points
+
+Risk levels:
+
+- `0`: no indicators
+- `1-29`: low
+- `30+`: medium
+- any high-severity finding: high
 
 ## Important limitation
 

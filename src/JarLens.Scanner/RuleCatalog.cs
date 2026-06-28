@@ -53,12 +53,11 @@ public static class RuleCatalog
             Category = "Token Logger",
             Severity = Severity.High,
             Explanation = "References to Discord LevelDB or Local State paths can indicate token harvesting from local Discord clients.",
+            FalsePositiveHint = "Discord rich presence or IPC integrations may mention Discord client names without reading token storage. Stronger evidence is a combination of Local State, leveldb, and exfiltration.",
             Patterns =
             [
                 new() { Value = "Local State" },
-                new() { Value = "leveldb" },
-                new() { Value = "discordcanary" },
-                new() { Value = "discordptb" }
+                new() { Value = "leveldb" }
             ]
         },
         new()
@@ -68,9 +67,9 @@ public static class RuleCatalog
             Category = "Minecraft Session Stealer",
             Severity = Severity.High,
             Explanation = "Minecraft launcher auth files may contain account/session material useful to steal accounts or sessions.",
+            FalsePositiveHint = "Generic .minecraft mentions are common in legitimate mods, so this rule only looks for account/session file names and token strings.",
             Patterns =
             [
-                new() { Value = ".minecraft" },
                 new() { Value = "launcher_accounts.json" },
                 new() { Value = "accounts.json" },
                 new() { Value = "accessToken" },
@@ -84,13 +83,14 @@ public static class RuleCatalog
             Category = "Credential Stealer",
             Severity = Severity.High,
             Explanation = "Browser cookie, password, and key database paths are often used by credential stealers.",
+            FalsePositiveHint = "Generic cookie classes are common in HTTP libraries, so this rule avoids matching the standalone word Cookies.",
             Patterns =
             [
                 new() { Value = "Login Data" },
-                new() { Value = "Cookies" },
-                new() { Value = "User Data" },
+                new() { Value = "Network\\Cookies" },
                 new() { Value = "AppData\\Local\\Google\\Chrome" },
-                new() { Value = "Microsoft\\Edge\\User Data" }
+                new() { Value = "Microsoft\\Edge\\User Data" },
+                new() { Value = "BraveSoftware\\Brave-Browser\\User Data" }
             ]
         },
         new()
@@ -100,9 +100,9 @@ public static class RuleCatalog
             Category = "Remote Access / Persistence",
             Severity = Severity.Medium,
             Explanation = "Launching external processes from a Minecraft jar is unusual and can be used for persistence, downloaders, or system changes.",
+            FalsePositiveHint = "Runtime metadata appears in normal class files, so this rule focuses on actual process execution APIs and shell names.",
             Patterns =
             [
-                new() { Value = "java/lang/Runtime" },
                 new() { Value = "java/lang/ProcessBuilder" },
                 new() { Value = "Runtime.exec" },
                 new() { Value = "powershell" },
@@ -133,10 +133,10 @@ public static class RuleCatalog
             Category = "Loader / Obfuscation",
             Severity = Severity.Medium,
             Explanation = "Dynamic class loading can be legitimate, but it is also used to hide or download payloads.",
+            FalsePositiveHint = "Plain ClassLoader references are common in libraries, so this rule focuses on URLClassLoader, defineClass, or reflective class lookup.",
             Patterns =
             [
                 new() { Value = "java/net/URLClassLoader" },
-                new() { Value = "java/lang/ClassLoader" },
                 new() { Value = "defineClass" },
                 new() { Value = "Class.forName" }
             ]

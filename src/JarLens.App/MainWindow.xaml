@@ -4,9 +4,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="JarLens" Height="720" Width="1120" MinHeight="620" MinWidth="920"
-        Background="#F6F7F9">
-    <Grid Margin="24">
+        Title="JarLens" Height="760" Width="1180" MinHeight="660" MinWidth="960"
+        Loaded="Window_Loaded">
+    <Grid x:Name="Root" Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,8 +15,8 @@
 
         <DockPanel Grid.Row="0" LastChildFill="True">
             <StackPanel>
-                <TextBlock Text="JarLens" FontSize="32" FontWeight="SemiBold" Foreground="#15181D" />
-                <TextBlock Text="Static malware triage for Minecraft jars and Java plugins." Margin="0,4,0,0" Foreground="#566070" FontSize="14" />
+                <TextBlock x:Name="TitleText" Text="JarLens" FontSize="32" FontWeight="SemiBold" />
+                <TextBlock x:Name="SubtitleText" Text="Static malware triage for Minecraft jars and Java plugins." Margin="0,4,0,0" FontSize="14" />
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,6,0,0">
                 <Button Content="Check updates" Width="128" Height="36" Margin="0,0,10,0" Click="CheckUpdates_Click" />
@@ -24,25 +24,38 @@
             </StackPanel>
         </DockPanel>
 
-        <Border Grid.Row="1" Margin="0,22,0,18" Padding="18" BorderBrush="#D8DEE8" BorderThickness="1" Background="White" CornerRadius="6"
+        <Border x:Name="DropCard" Grid.Row="1" Margin="0,22,0,18" Padding="18" BorderThickness="1" CornerRadius="6"
                 AllowDrop="True" Drop="DropZone_Drop" DragOver="DropZone_DragOver">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="320" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel>
-                    <TextBlock Text="Drop a .jar here or choose one to scan." FontSize="18" FontWeight="SemiBold" Foreground="#15181D" />
-                    <TextBlock Text="JarLens does not execute jars, upload files, or make network requests by default." Margin="0,7,0,0" Foreground="#566070" />
-                    <TextBlock x:Name="SelectedFileText" Text="No file selected" Margin="0,10,0,0" Foreground="#7A8494" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DropTitleText" Text="Drop a .jar here or choose one to scan." FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="TrustText" Text="JarLens does not execute jars, upload files, or make network requests during scanning." Margin="0,7,0,0" />
+                    <TextBlock x:Name="SelectedFileText" Text="No file selected" Margin="0,10,0,0" TextWrapping="Wrap" />
                 </StackPanel>
 
-                <Border Grid.Column="1" Background="#F0F3F7" BorderBrush="#D8DEE8" BorderThickness="1" CornerRadius="6" Padding="14">
+                <Border x:Name="RiskCard" Grid.Column="1" BorderThickness="1" CornerRadius="6" Padding="14">
                     <StackPanel>
-                        <TextBlock Text="Risk" Foreground="#566070" />
-                        <TextBlock x:Name="RiskText" Text="Not scanned" FontSize="24" FontWeight="SemiBold" Margin="0,5,0,0" Foreground="#15181D" />
-                        <TextBlock x:Name="RiskScoreText" Text="Score: -" Margin="0,5,0,0" Foreground="#566070" />
+                        <DockPanel>
+                            <TextBlock x:Name="RiskLabelText" Text="Risk" DockPanel.Dock="Left" />
+                            <TextBlock x:Name="RiskScoreText" Text="Score: -" DockPanel.Dock="Right" HorizontalAlignment="Right" />
+                        </DockPanel>
+                        <TextBlock x:Name="RiskText" Text="Not scanned" FontSize="24" FontWeight="SemiBold" Margin="0,5,0,8" />
+                        <ProgressBar x:Name="RiskMeter" Minimum="0" Maximum="100" Height="12" Value="0" />
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="LowThresholdText" Text="1-29 Low" FontSize="11" />
+                            <TextBlock x:Name="MediumThresholdText" Grid.Column="1" Text="30+ Medium" FontSize="11" HorizontalAlignment="Center" />
+                            <TextBlock x:Name="HighThresholdText" Grid.Column="2" Text="High rule = High" FontSize="11" HorizontalAlignment="Right" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -54,31 +67,50 @@
                 <ColumnDefinition Width="3*" />
             </Grid.ColumnDefinitions>
 
-            <Border Padding="14" Background="White" BorderBrush="#D8DEE8" BorderThickness="1" CornerRadius="6" Margin="0,0,12,0">
+            <Border x:Name="FindingsCard" Padding="14" BorderThickness="1" CornerRadius="6" Margin="0,0,12,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Findings" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10" />
+                    <TextBlock x:Name="FindingsHeaderText" Text="Findings" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <ListBox x:Name="FindingsList" Grid.Row="1" SelectionChanged="FindingsList_SelectionChanged" BorderThickness="0">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Margin="0,6">
-                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Category}" Foreground="#566070" FontSize="12" />
-                                </StackPanel>
+                                <Grid Margin="0,6">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel>
+                                        <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" DockPanel.Dock="Right" Margin="10,0,0,0" />
+                                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <TextBlock Grid.Row="1" Text="{Binding Category}" FontSize="12" Opacity="0.78" />
+                                    <TextBlock Grid.Row="2" Text="{Binding Summary}" FontSize="12" Opacity="0.78" />
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1" Padding="14" Background="White" BorderBrush="#D8DEE8" BorderThickness="1" CornerRadius="6">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <TextBox x:Name="ReportText" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" FontFamily="Consolas" FontSize="13"
-                             Text="Open a jar to generate a report." />
-                </ScrollViewer>
+            <Border x:Name="ReportCard" Grid.Column="1" Padding="14" BorderThickness="1" CornerRadius="6">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock x:Name="DetailTitleText" Text="Report" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock x:Name="DetailSubtitleText" Text="Open a jar to generate a report." Margin="0,4,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <TextBox x:Name="ReportText" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" FontFamily="Consolas" FontSize="13"
+                                 Text="Open a jar to generate a report." />
+                    </ScrollViewer>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

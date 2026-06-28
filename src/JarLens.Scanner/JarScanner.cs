@@ -77,8 +77,8 @@ public sealed class JarScanner
                 RuleId = "nested_jars",
                 Label = "Nested jar payloads",
                 Category = "Loader / Packaging",
-                Severity = Severity.Medium,
-                Explanation = "Nested jars can be normal for shaded plugins, but they can also hide secondary payloads that need separate inspection.",
+                Severity = Severity.Low,
+                Explanation = "Nested jars are common in shaded mods/plugins, but they can also hide secondary payloads. Review them when other suspicious indicators are present.",
                 Evidence = [new Evidence { Source = "archive", Match = $"{nestedJarCount} nested jar file(s)" }]
             });
         }
@@ -138,13 +138,17 @@ public sealed class JarScanner
 
             if (evidence.Count > 0)
             {
+                var explanation = string.IsNullOrWhiteSpace(rule.FalsePositiveHint)
+                    ? rule.Explanation
+                    : rule.Explanation + " False-positive note: " + rule.FalsePositiveHint;
+
                 findings.Add(new Finding
                 {
                     RuleId = rule.Id,
                     Label = rule.Label,
                     Category = rule.Category,
                     Severity = rule.Severity,
-                    Explanation = rule.Explanation,
+                    Explanation = explanation,
                     Evidence = evidence.DistinctBy(e => $"{e.Source}|{e.Match}").ToList()
                 });
             }
@@ -175,7 +179,7 @@ public sealed class JarScanner
         var level = score switch
         {
             _ when highestSeverity >= Severity.High => "High",
-            >= 15 => "Medium",
+            >= 30 => "Medium",
             >= 1 => "Low",
             _ => "No indicators"
         };

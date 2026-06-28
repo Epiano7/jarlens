@@ -18,6 +18,7 @@ Console.WriteLine();
 Console.WriteLine($"SHA256: {result.Sha256}");
 Console.WriteLine($"Size: {result.SizeBytes:N0} bytes");
 Console.WriteLine($"Entries: {result.EntryCount}, classes: {result.ClassCount}, nested jars: {result.NestedJarCount}");
+Console.WriteLine("Score guide: 0 no indicators, 1-29 low, 30+ medium, any high-severity rule high.");
 Console.WriteLine();
 
 if (result.Findings.Count == 0)
@@ -28,14 +29,24 @@ if (result.Findings.Count == 0)
 
 foreach (var finding in result.Findings)
 {
-    Console.WriteLine($"[{finding.Severity}] {finding.Label} ({finding.Category})");
+    Console.WriteLine($"[{finding.Severity}, +{ScoreContribution(finding.Severity)}] {finding.Label} ({finding.Category})");
     Console.WriteLine($"  {finding.Explanation}");
+    Console.WriteLine($"  Evidence ({finding.Evidence.Count}):");
     foreach (var evidence in finding.Evidence)
     {
-        Console.WriteLine($"  - {evidence.Source}: {evidence.Match}");
+        Console.WriteLine($"    - {evidence.Source}: {evidence.Match}");
     }
 
     Console.WriteLine();
 }
 
 return result.Risk.Level == "High" ? 1 : 0;
+
+static int ScoreContribution(Severity severity) => severity switch
+{
+    Severity.Critical => 60,
+    Severity.High => 35,
+    Severity.Medium => 15,
+    Severity.Low => 5,
+    _ => 0
+};

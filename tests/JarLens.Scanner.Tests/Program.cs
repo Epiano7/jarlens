@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 
 var tempJar = Path.Combine(Path.GetTempPath(), $"jarlens-test-{Guid.NewGuid():N}.jar");
+var falsePositiveJar = Path.Combine(Path.GetTempPath(), $"jarlens-fp-test-{Guid.NewGuid():N}.jar");
 try
 {
     using (var archive = ZipFile.Open(tempJar, ZipArchiveMode.Create))
@@ -24,6 +25,18 @@ try
     Assert(result.Findings.Any(f => f.RuleId == "discord_webhook"), "Expected Discord webhook finding.");
     Assert(result.Findings.Any(f => f.RuleId == "networking_api"), "Expected networking API finding.");
     Assert(result.Risk.Level is "High", "Expected high risk.");
+
+    using (var archive = ZipFile.Open(falsePositiveJar, ZipArchiveMode.Create))
+    {
+        var libraryClass = archive.CreateEntry("org/apache/http/client/CookieStore.class");
+        await using (var stream = libraryClass.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("Cookies .minecraft discordcanary java/lang/Runtime java/lang/ClassLoader"));
+        }
+    }
+
+    var falsePositiveResult = new JarScanner().Scan(falsePositiveJar);
+    Assert(falsePositiveResult.Findings.All(f => f.Severity < Severity.High), "Generic library strings should not create high-risk findings.");
     Console.WriteLine("JarLens.Scanner.Tests passed.");
     return 0;
 }
@@ -37,6 +50,11 @@ finally
     if (File.Exists(tempJar))
     {
         File.Delete(tempJar);
+    }
+
+    if (File.Exists(falsePositiveJar))
+    {
+        File.Delete(falsePositiveJar);
     }
 }
 

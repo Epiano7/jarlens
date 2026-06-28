@@ -9,6 +9,7 @@ public sealed record IndicatorRule
     public required string Category { get; init; }
     public Severity Severity { get; init; } = Severity.Low;
     public string Explanation { get; init; } = "";
+    public string? FalsePositiveHint { get; init; }
     public List<RulePattern> Patterns { get; init; } = [];
 }
 
