@@ -1,0 +1,42 @@
+[
+  {
+    "id": "process_execution",
+    "label": "Process or shell execution",
+    "category": "Remote Access / Persistence",
+    "severity": "Medium",
+    "explanation": "Launching external processes from a Minecraft jar is unusual and can be used for persistence, downloaders, or system changes.",
+    "patterns": [
+      { "value": "java/lang/Runtime" },
+      { "value": "java/lang/ProcessBuilder" },
+      { "value": "Runtime.exec" },
+      { "value": "powershell" },
+      { "value": "cmd.exe" }
+    ]
+  },
+  {
+    "id": "runtime_loader",
+    "label": "Runtime class loading",
+    "category": "Loader / Obfuscation",
+    "severity": "Medium",
+    "explanation": "Dynamic class loading can be legitimate, but it is also used to hide or download payloads.",
+    "patterns": [
+      { "value": "java/net/URLClassLoader" },
+      { "value": "java/lang/ClassLoader" },
+      { "value": "defineClass" },
+      { "value": "Class.forName" }
+    ]
+  },
+  {
+    "id": "crypto_encoding",
+    "label": "Crypto or encoded payload helpers",
+    "category": "Obfuscation / Evasion",
+    "severity": "Low",
+    "explanation": "Base64 and crypto APIs are common in benign software too, but in small jars they can indicate hidden strings or payloads.",
+    "patterns": [
+      { "value": "java/util/Base64" },
+      { "value": "javax/crypto/Cipher" },
+      { "value": "AES" },
+      { "value": "GZIPInputStream" }
+    ]
+  }
+]
