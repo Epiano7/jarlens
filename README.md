@@ -8,7 +8,8 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 
 - JarLens does not execute jars.
 - JarLens does not upload jars.
-- JarLens makes no network requests by default.
+- JarLens makes no network requests during scanning.
+- JarLens only contacts GitHub when you click **Check updates**.
 - JarLens is a static triage tool, not a guarantee that a jar is safe.
 
 ## Current features
@@ -20,6 +21,13 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 - Nested jar detection.
 - Rule-based detection for token loggers, Minecraft session stealers, credential paths, IP grabbers, loaders, process execution, and obfuscation helpers.
 - Human-readable findings with category, severity, explanation, and evidence.
+- Manual GitHub Releases update check.
+
+## Updates
+
+JarLens compares its built-in app version to the latest GitHub Release only when you click **Check updates**. It does not upload scanned jars or send scan results.
+
+Portable app updates are release-based, not commit-based. Normal users should install tagged releases such as `v1.0.0`, not arbitrary commits.
 
 ## Build
 

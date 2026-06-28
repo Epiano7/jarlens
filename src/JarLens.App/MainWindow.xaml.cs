@@ -29,6 +29,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ReportText.Text = "Checking GitHub Releases. No jars are uploaded.";
+            var update = await UpdateChecker.CheckLatestReleaseAsync();
+            if (update.IsUpdateAvailable && update.ReleaseUrl is not null)
+            {
+                var answer = MessageBox.Show(this, update.Message + Environment.NewLine + Environment.NewLine + "Open the GitHub release page?", "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                if (answer == MessageBoxResult.Yes)
+                {
+                    UpdateChecker.OpenReleasePage(update.ReleaseUrl);
+                }
+            }
+            else
+            {
+                MessageBox.Show(this, update.Message, "JarLens updates", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+
+            ReportText.Text = update.Message;
+        }
+        catch (Exception ex)
+        {
+            ReportText.Text = "Update check failed. JarLens only checks GitHub when you click Check updates." + Environment.NewLine + ex.Message;
+            MessageBox.Show(this, "Update check failed. This does not affect local jar scanning.", "JarLens updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void DropZone_DragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
