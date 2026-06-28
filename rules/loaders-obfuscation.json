@@ -5,8 +5,8 @@
     "category": "Remote Access / Persistence",
     "severity": "Medium",
     "explanation": "Launching external processes from a Minecraft jar is unusual and can be used for persistence, downloaders, or system changes.",
+    "falsePositiveHint": "Runtime metadata appears in normal class files, so this rule focuses on actual process execution APIs and shell names.",
     "patterns": [
-      { "value": "java/lang/Runtime" },
       { "value": "java/lang/ProcessBuilder" },
       { "value": "Runtime.exec" },
       { "value": "powershell" },
@@ -19,9 +19,9 @@
     "category": "Loader / Obfuscation",
     "severity": "Medium",
     "explanation": "Dynamic class loading can be legitimate, but it is also used to hide or download payloads.",
+    "falsePositiveHint": "Plain ClassLoader references are common in libraries, so this rule focuses on URLClassLoader, defineClass, or reflective class lookup.",
     "patterns": [
       { "value": "java/net/URLClassLoader" },
-      { "value": "java/lang/ClassLoader" },
       { "value": "defineClass" },
       { "value": "Class.forName" }
     ]

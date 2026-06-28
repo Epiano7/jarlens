@@ -16,11 +16,10 @@
     "category": "Token Logger",
     "severity": "High",
     "explanation": "References to Discord LevelDB or Local State paths can indicate token harvesting from local Discord clients.",
+    "falsePositiveHint": "Discord rich presence or IPC integrations may mention Discord client names without reading token storage. Stronger evidence is a combination of Local State, leveldb, and exfiltration.",
     "patterns": [
       { "value": "Local State" },
-      { "value": "leveldb" },
-      { "value": "discordcanary" },
-      { "value": "discordptb" }
+      { "value": "leveldb" }
     ]
   }
 ]
