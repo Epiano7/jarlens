@@ -17,6 +17,8 @@ jobs:
           dotnet-version: 9.0.x
       - name: Publish portable exe
         run: dotnet publish src/JarLens.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/JarLens-win-x64
+      - name: Publish updater exe
+        run: dotnet publish src/JarLens.Updater -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/JarLens-win-x64
       - name: Copy rules
         run: Copy-Item -Recurse rules artifacts/JarLens-win-x64/rules
       - name: Checksums

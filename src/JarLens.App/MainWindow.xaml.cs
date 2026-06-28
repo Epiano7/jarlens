@@ -43,10 +43,19 @@ public partial class MainWindow : Window
             var update = await UpdateChecker.CheckLatestReleaseAsync();
             if (update.IsUpdateAvailable && update.ReleaseUrl is not null)
             {
-                var answer = MessageBox.Show(this, update.Message + Environment.NewLine + Environment.NewLine + "Open the GitHub release page?", "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                var answer = MessageBox.Show(this,
+                    update.Message + Environment.NewLine + Environment.NewLine +
+                    "JarLens will download the release zip from GitHub, verify its SHA-256 checksum, close, replace the portable files, and restart.",
+                    "Update available",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
                 if (answer == MessageBoxResult.Yes)
                 {
-                    UpdateChecker.OpenReleasePage(update.ReleaseUrl);
+                    var progress = new Progress<string>(message => ReportText.Text = message);
+                    var preparedUpdate = await UpdateChecker.DownloadAndPrepareUpdateAsync(update, progress);
+                    ReportText.Text = "Starting updater. JarLens will close and restart.";
+                    UpdateChecker.StartUpdaterAndExit(preparedUpdate);
+                    Close();
                 }
             }
             else

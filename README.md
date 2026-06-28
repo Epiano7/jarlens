@@ -21,13 +21,15 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 - Nested jar detection.
 - Rule-based detection for token loggers, Minecraft session stealers, credential paths, IP grabbers, loaders, process execution, and obfuscation helpers.
 - Human-readable findings with category, severity, explanation, and evidence.
-- Manual GitHub Releases update check.
+- One-click GitHub Releases updater with SHA-256 verification.
 - System-aware light/dark theme.
 - Risk meter with visible score thresholds.
 
 ## Updates
 
 JarLens compares its built-in app version to the latest GitHub Release only when you click **Check updates**. It does not upload scanned jars or send scan results.
+
+If an update is available, JarLens can download the portable release zip, verify its SHA-256 checksum, start `JarLens.Updater.exe`, close itself, replace the portable files, and restart.
 
 Portable app updates are release-based, not commit-based. Normal users should install tagged releases such as `v1.0.0`, not arbitrary commits.
 
@@ -53,6 +55,7 @@ dotnet run --project src/JarLens.Cli -- "C:\path\to\file.jar" rules
 
 ```powershell
 dotnet publish src/JarLens.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+dotnet publish src/JarLens.Updater -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o src/JarLens.App/bin/Release/net9.0-windows/win-x64/publish
 ```
 
 The output exe is written under:
