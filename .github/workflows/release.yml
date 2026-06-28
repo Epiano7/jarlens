@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Publish portable exe
+        run: dotnet publish src/JarLens.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/JarLens-win-x64
+      - name: Copy rules
+        run: Copy-Item -Recurse rules artifacts/JarLens-win-x64/rules
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts/JarLens-win-x64 -File | Get-FileHash -Algorithm SHA256 | ForEach-Object {
+            "$($_.Hash)  $($_.Path | Split-Path -Leaf)"
+          } | Set-Content artifacts/JarLens-win-x64/SHA256SUMS.txt
+      - name: Archive
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/JarLens-win-x64/* -DestinationPath artifacts/JarLens-win-x64.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/JarLens-win-x64.zip

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "minecraft_auth_files",
+    "label": "Minecraft account/session file access",
+    "category": "Minecraft Session Stealer",
+    "severity": "High",
+    "explanation": "Minecraft launcher auth files may contain account/session material useful to steal accounts or sessions.",
+    "patterns": [
+      { "value": ".minecraft" },
+      { "value": "launcher_accounts.json" },
+      { "value": "accounts.json" },
+      { "value": "accessToken" },
+      { "value": "clientToken" }
+    ]
+  }
+]

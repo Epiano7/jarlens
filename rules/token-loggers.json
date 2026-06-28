@@ -1,0 +1,26 @@
+[
+  {
+    "id": "discord_webhook",
+    "label": "Discord webhook endpoint",
+    "category": "Token Logger / Exfiltration",
+    "severity": "High",
+    "explanation": "Discord webhooks are commonly used by jar stealers to send tokens, IPs, screenshots, or system data to an attacker-controlled channel.",
+    "patterns": [
+      { "value": "discord.com/api/webhooks" },
+      { "value": "discordapp.com/api/webhooks" }
+    ]
+  },
+  {
+    "id": "discord_token_storage",
+    "label": "Discord token storage access",
+    "category": "Token Logger",
+    "severity": "High",
+    "explanation": "References to Discord LevelDB or Local State paths can indicate token harvesting from local Discord clients.",
+    "patterns": [
+      { "value": "Local State" },
+      { "value": "leveldb" },
+      { "value": "discordcanary" },
+      { "value": "discordptb" }
+    ]
+  }
+]

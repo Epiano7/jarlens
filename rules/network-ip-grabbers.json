@@ -1,0 +1,30 @@
+[
+  {
+    "id": "networking_api",
+    "label": "Networking APIs",
+    "category": "Network Activity",
+    "severity": "Low",
+    "explanation": "Network APIs are not malicious on their own, but unexpected outbound traffic from a mod/plugin deserves review.",
+    "patterns": [
+      { "value": "java/net/URL", "appliesTo": ".class" },
+      { "value": "java/net/HttpURLConnection", "appliesTo": ".class" },
+      { "value": "java/net/Socket", "appliesTo": ".class" },
+      { "value": "java/net/http/HttpClient", "appliesTo": ".class" },
+      { "value": "http://", "appliesTo": ".class" },
+      { "value": "https://", "appliesTo": ".class" }
+    ]
+  },
+  {
+    "id": "public_ip_lookup",
+    "label": "Public IP lookup service",
+    "category": "IP Grabber",
+    "severity": "Medium",
+    "explanation": "Public IP lookup APIs are commonly used to identify and exfiltrate a user's external IP address.",
+    "patterns": [
+      { "value": "api.ipify.org" },
+      { "value": "ifconfig.me" },
+      { "value": "icanhazip.com" },
+      { "value": "ipinfo.io" }
+    ]
+  }
+]
