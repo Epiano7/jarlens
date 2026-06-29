@@ -20,6 +20,7 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 - SHA-256 fingerprinting.
 - Manifest, Bukkit/Paper `plugin.yml`, Forge/Fabric metadata extraction.
 - Nested jar detection.
+- Recursive nested jar inspection.
 - Rule-based detection for token loggers, Minecraft session stealers, credential paths, IP grabbers, loaders, process execution, and obfuscation helpers.
 - Human-readable findings with category, severity, explanation, and evidence.
 - One-click GitHub Releases updater with SHA-256 verification.
