@@ -34,6 +34,7 @@ public sealed class JarScanner
         var activeRules = rules is { Count: > 0 } ? rules : RuleCatalog.DefaultRules;
         var findings = MatchRules(activeRules, documents);
         findings.AddRange(BuildCompositeFindings(findings));
+        findings.AddRange(BuildMetadataFindings(documents));
         if (stats.NestedJarCount > 0)
         {
             findings.Add(new Finding
@@ -266,7 +267,75 @@ public sealed class JarScanner
             });
         }
 
+        if (byId.TryGetValue("process_execution", out var process) &&
+            byId.TryGetValue("networking_api", out var networking) &&
+            byId.TryGetValue("crypto_encoding", out var crypto))
+        {
+            var overlap = FindSourceOverlap(process, networking, crypto);
+            if (overlap.Count > 0)
+            {
+                composites.Add(new Finding
+                {
+                    RuleId = "combo_process_network_crypto_same_class",
+                    Label = "Process execution, networking, and crypto in same class",
+                    Category = "RAT / Loader",
+                    Severity = Severity.Critical,
+                    Explanation = "The same class contains process-launch, network, and encoding/crypto indicators. This is a strong malware pattern for launchers, stealers, and remote-access payloads.",
+                    Evidence = overlap
+                });
+            }
+        }
+
         return composites;
+    }
+
+    private static List<Finding> BuildMetadataFindings(IReadOnlyList<ScanDocument> documents)
+    {
+        var findings = new List<Finding>();
+        foreach (var metadata in documents
+            .Where(d => d.Source.EndsWith("fabric.mod.json", StringComparison.OrdinalIgnoreCase))
+            .DistinctBy(d => d.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            var suspiciousEntrypoints = Regex.Matches(metadata.Text, "\"com\\.github\\.[A-Za-z0-9_$]+\"")
+                .Select(match => new Evidence { Source = metadata.Source, Match = match.Value.Trim('"') })
+                .DistinctBy(e => $"{e.Source}|{e.Match}")
+                .Take(MaxEvidencePerRule)
+                .ToList();
+
+            if (suspiciousEntrypoints.Count > 0)
+            {
+                findings.Add(new Finding
+                {
+                    RuleId = "suspicious_fabric_entrypoint",
+                    Label = "Suspicious Fabric entrypoint",
+                    Category = "Impersonation / Loader",
+                    Severity = Severity.High,
+                    Explanation = "The Fabric metadata registers an entrypoint under a generic com.github package. In mod impersonation cases, extra entrypoints can be used to launch hidden payload code alongside a legitimate-looking mod.",
+                    Evidence = suspiciousEntrypoints
+                });
+            }
+        }
+
+        foreach (var manifest in documents
+            .Where(d => d.Source.EndsWith("META-INF/MANIFEST.MF", StringComparison.OrdinalIgnoreCase))
+            .DistinctBy(d => d.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            var mainClass = Regex.Match(manifest.Text, @"(?m)^Main-Class:\s*(com\.github\.[A-Za-z0-9_.$-]+)\s*$");
+            if (mainClass.Success)
+            {
+                findings.Add(new Finding
+                {
+                    RuleId = "suspicious_manifest_main_class",
+                    Label = "Suspicious manifest main class",
+                    Category = "Impersonation / Loader",
+                    Severity = Severity.Medium,
+                    Explanation = "The jar manifest defines a generic com.github Main-Class. Minecraft mods usually load through mod metadata; an unrelated main class can be a sign of repackaging or a hidden launcher.",
+                    Evidence = [new Evidence { Source = manifest.Source, Match = mainClass.Groups[1].Value }]
+                });
+            }
+        }
+
+        return findings;
     }
 
     private static IReadOnlyList<Evidence> CombineEvidence(params Finding?[] findings) =>
@@ -276,6 +345,24 @@ public sealed class JarScanner
             .DistinctBy(e => $"{e.Source}|{e.Match}")
             .Take(MaxEvidencePerRule)
             .ToList();
+
+    private static IReadOnlyList<Evidence> FindSourceOverlap(params Finding[] findings)
+    {
+        var commonSources = findings
+            .Select(f => f.Evidence.Select(e => e.Source).ToHashSet(StringComparer.OrdinalIgnoreCase))
+            .Aggregate((left, right) =>
+            {
+                left.IntersectWith(right);
+                return left;
+            });
+
+        return findings
+            .SelectMany(f => f.Evidence)
+            .Where(e => commonSources.Contains(e.Source))
+            .DistinctBy(e => $"{e.Source}|{e.Match}")
+            .Take(MaxEvidencePerRule)
+            .ToList();
+    }
 
     private static bool IsMatch(string text, RulePattern pattern) =>
         pattern.Kind switch
