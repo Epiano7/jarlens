@@ -33,8 +33,7 @@ public sealed class JarScanner
 
         var activeRules = rules is { Count: > 0 } ? rules : RuleCatalog.DefaultRules;
         var findings = MatchRules(activeRules, documents);
-        findings.AddRange(BuildCompositeFindings(findings));
-        findings.AddRange(BuildMetadataFindings(documents));
+        findings.AddRange(BuildMetadataFindings(file.Name, documents));
         if (stats.NestedJarCount > 0)
         {
             findings.Add(new Finding
@@ -59,6 +58,7 @@ public sealed class JarScanner
                 Evidence = embeddedExecutables.Take(MaxEvidencePerRule).ToList()
             });
         }
+        findings.AddRange(BuildCompositeFindings(findings));
 
         return new ScanResult
         {
@@ -129,6 +129,11 @@ public sealed class JarScanner
                 documents.Add(new ScanDocument(sourceName, text));
             }
 
+            if (IsExecutableOrScript(name))
+            {
+                continue;
+            }
+
             var strings = ExtractPrintableStrings(bytes);
             if (strings.Count > 0)
             {
@@ -175,12 +180,12 @@ public sealed class JarScanner
                         continue;
                     }
 
-                    if (IsMatch(document.Text, pattern))
+                    if (TryMatch(document.Text, pattern, out var matchedValue))
                     {
                         evidence.Add(new Evidence
                         {
                             Source = document.Source,
-                            Match = pattern.Value
+                            Match = matchedValue
                         });
                     }
 
@@ -256,15 +261,19 @@ public sealed class JarScanner
         if (byId.TryGetValue("runtime_loader", out var loader) &&
             byId.TryGetValue("networking_api", out var network))
         {
-            composites.Add(new Finding
+            var overlap = FindSourceOverlap(loader, network);
+            if (overlap.Count > 0)
             {
-                RuleId = "combo_network_loader",
-                Label = "Network-capable runtime loader",
-                Category = "Loader / Downloader",
-                Severity = Severity.High,
-                Explanation = "The jar contains networking APIs and runtime class-loading indicators. This can be benign, but it is also a common downloader/loader pattern.",
-                Evidence = CombineEvidence(loader, network)
-            });
+                composites.Add(new Finding
+                {
+                    RuleId = "combo_network_loader",
+                    Label = "Network-capable runtime loader",
+                    Category = "Loader / Downloader",
+                    Severity = Severity.Medium,
+                    Explanation = "The same class contains networking APIs and runtime class-loading indicators. This can be benign in mod loaders, but it is also a downloader/loader pattern worth reviewing.",
+                    Evidence = overlap
+                });
+            }
         }
 
         if (byId.TryGetValue("process_execution", out var process) &&
@@ -286,10 +295,26 @@ public sealed class JarScanner
             }
         }
 
+        if (byId.TryGetValue("metadata_identity_mismatch", out var identityMismatch) &&
+            byId.TryGetValue("nested_jars", out var nestedJars) &&
+            byId.TryGetValue("networking_api", out var metadataNetworking) &&
+            byId.TryGetValue("crypto_encoding", out var metadataCrypto))
+        {
+            composites.Add(new Finding
+            {
+                RuleId = "combo_impersonation_nested_network_code",
+                Label = "Possible repackaged mod with nested network-capable code",
+                Category = "Impersonation / Loader",
+                Severity = Severity.High,
+                Explanation = "The jar filename/branding does not match its declared mod identity, and the package also contains nested jars with network and encoding helpers. This combination is common in repackaged malware even when each low-level API is individually explainable.",
+                Evidence = CombineEvidence(identityMismatch, nestedJars, metadataNetworking, metadataCrypto)
+            });
+        }
+
         return composites;
     }
 
-    private static List<Finding> BuildMetadataFindings(IReadOnlyList<ScanDocument> documents)
+    private static List<Finding> BuildMetadataFindings(string fileName, IReadOnlyList<ScanDocument> documents)
     {
         var findings = new List<Finding>();
         foreach (var metadata in documents
@@ -314,6 +339,20 @@ public sealed class JarScanner
                     Evidence = suspiciousEntrypoints
                 });
             }
+
+            if (IsRootMetadata(fileName, metadata.Source) &&
+                TryBuildIdentityMismatchEvidence(fileName, metadata, out var mismatchEvidence))
+            {
+                findings.Add(new Finding
+                {
+                    RuleId = "metadata_identity_mismatch",
+                    Label = "Jar filename does not match declared mod identity",
+                    Category = "Impersonation / Loader",
+                    Severity = Severity.Medium,
+                    Explanation = "The outer jar name appears unrelated to the Fabric mod id/name declared inside the jar. This can happen with harmless renames, but it is also a common sign of repackaged or impersonated mods.",
+                    Evidence = [mismatchEvidence]
+                });
+            }
         }
 
         foreach (var manifest in documents
@@ -336,6 +375,87 @@ public sealed class JarScanner
         }
 
         return findings;
+    }
+
+    private static bool IsRootMetadata(string fileName, string source) =>
+        source.Equals(fileName + "!/fabric.mod.json", StringComparison.OrdinalIgnoreCase) ||
+        source.Equals(fileName + "!/quilt.mod.json", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryBuildIdentityMismatchEvidence(string fileName, ScanDocument metadata, out Evidence evidence)
+    {
+        evidence = new Evidence { Source = metadata.Source, Match = string.Empty };
+        var fileTokens = ExtractIdentityTokens(Path.GetFileNameWithoutExtension(fileName));
+        if (fileTokens.Count == 0)
+        {
+            return false;
+        }
+
+        var id = FirstJsonStringValue(metadata.Text, "id");
+        var name = FirstJsonStringValue(metadata.Text, "name");
+        var sources = FirstJsonStringValue(metadata.Text, "sources");
+        var homepage = FirstJsonStringValue(metadata.Text, "homepage");
+        var identityText = string.Join(' ', new[] { id, name, sources, homepage }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var identityTokens = ExtractIdentityTokens(identityText);
+        if (identityTokens.Count == 0)
+        {
+            return false;
+        }
+
+        var hasOverlap = fileTokens.Overlaps(identityTokens);
+        if (hasOverlap)
+        {
+            return false;
+        }
+
+        evidence = new Evidence
+        {
+            Source = metadata.Source,
+            Match = $"file '{Path.GetFileNameWithoutExtension(fileName)}' vs declared id/name '{id ?? "unknown"}' / '{name ?? "unknown"}'"
+        };
+        return true;
+    }
+
+    private static string? FirstJsonStringValue(string text, string propertyName)
+    {
+        var escapedName = Regex.Escape(propertyName);
+        var match = Regex.Match(text, $"\"{escapedName}\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    private static HashSet<string> ExtractIdentityTokens(string value)
+    {
+        var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "fabric", "forge", "quilt", "neoforge", "minecraft", "client", "server", "mod", "mods",
+            "mc", "snapshot", "release", "beta", "alpha", "build", "final", "official"
+        };
+
+        return Regex.Matches(value, "[a-zA-Z][a-zA-Z0-9]+")
+            .SelectMany(match => ExpandIdentityToken(match.Value))
+            .Where(token => token.Length >= 5)
+            .Where(token => !ignored.Contains(token))
+            .Where(token => !Regex.IsMatch(token, @"^\d+$"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> ExpandIdentityToken(string value)
+    {
+        var normalized = value.ToLowerInvariant();
+        yield return normalized;
+        if (normalized.EndsWith('s') && normalized.Length > 5)
+        {
+            yield return normalized[..^1];
+        }
+
+        foreach (Match part in Regex.Matches(value, @"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+"))
+        {
+            var token = part.Value.ToLowerInvariant();
+            yield return token;
+            if (token.EndsWith('s') && token.Length > 5)
+            {
+                yield return token[..^1];
+            }
+        }
     }
 
     private static IReadOnlyList<Evidence> CombineEvidence(params Finding?[] findings) =>
@@ -364,12 +484,23 @@ public sealed class JarScanner
             .ToList();
     }
 
-    private static bool IsMatch(string text, RulePattern pattern) =>
-        pattern.Kind switch
+    private static bool TryMatch(string text, RulePattern pattern, out string matchedValue)
+    {
+        matchedValue = pattern.Value;
+        if (pattern.Kind == PatternKind.Regex)
         {
-            PatternKind.Regex => Regex.IsMatch(text, pattern.Value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250)),
-            _ => text.Contains(pattern.Value, StringComparison.OrdinalIgnoreCase)
-        };
+            var match = Regex.Match(text, pattern.Value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250));
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            matchedValue = match.Value;
+            return true;
+        }
+
+        return text.Contains(pattern.Value, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static RiskSummary Score(IReadOnlyList<Finding> findings)
     {
@@ -429,7 +560,11 @@ public sealed class JarScanner
                extension.Equals(".bat", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".vbs", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".js", StringComparison.OrdinalIgnoreCase);
+               extension.Equals(".js", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".so", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".dylib", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".jnilib", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".node", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DecodeText(byte[] bytes)

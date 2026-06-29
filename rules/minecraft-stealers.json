@@ -3,9 +3,9 @@
     "id": "minecraft_auth_files",
     "label": "Minecraft account/session file access",
     "category": "Minecraft Session Stealer",
-    "severity": "High",
+    "severity": "Medium",
     "explanation": "Minecraft launcher auth files may contain account/session material useful to steal accounts or sessions.",
-    "falsePositiveHint": "Generic .minecraft mentions are common in legitimate mods, so this rule only looks for account/session file names and token strings.",
+    "falsePositiveHint": "OAuth and account-management mods can legitimately contain accessToken/clientToken wording. This becomes much stronger when paired with an exfiltration endpoint.",
     "patterns": [
       { "value": "launcher_accounts.json" },
       { "value": "accounts.json" },

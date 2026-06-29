@@ -17,8 +17,8 @@
     "severity": "High",
     "explanation": "The jar contains a string shaped like a Discord token. This may be a hardcoded test token, stolen token, or token-pattern handling code.",
     "patterns": [
-      { "value": "mfa\\.[A-Za-z0-9_-]{20,}", "kind": "Regex" },
-      { "value": "[A-Za-z0-9_-]{24}\\.[A-Za-z0-9_-]{6}\\.[A-Za-z0-9_-]{20,}", "kind": "Regex" }
+      { "value": "mfa\\.[A-Za-z0-9_-]{20,}", "kind": "Regex", "appliesTo": ".class" },
+      { "value": "[A-Za-z0-9_-]{24}\\.[A-Za-z0-9_-]{6}\\.[A-Za-z0-9_-]{20,}", "kind": "Regex", "appliesTo": ".class" }
     ]
   },
   {
