@@ -151,6 +151,7 @@ public partial class MainWindow : Window
             $"Entries: {result.EntryCount}",
             $"Classes: {result.ClassCount}",
             $"Nested jars: {result.NestedJarCount}",
+            $"Embedded executables/scripts: {result.EmbeddedExecutableCount}",
             ""
         };
 

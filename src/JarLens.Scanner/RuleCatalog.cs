@@ -48,6 +48,19 @@ public static class RuleCatalog
         },
         new()
         {
+            Id = "discord_token_regex",
+            Label = "Discord token-looking string",
+            Category = "Token Logger / Credential Artifact",
+            Severity = Severity.High,
+            Explanation = "The jar contains a string shaped like a Discord token. This may be a hardcoded test token, stolen token, or token-pattern handling code.",
+            Patterns =
+            [
+                new() { Value = @"mfa\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex },
+                new() { Value = @"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex }
+            ]
+        },
+        new()
+        {
             Id = "discord_token_storage",
             Label = "Discord token storage access",
             Category = "Token Logger",
@@ -58,6 +71,52 @@ public static class RuleCatalog
             [
                 new() { Value = "Local State" },
                 new() { Value = "leveldb" }
+            ]
+        },
+        new()
+        {
+            Id = "telegram_bot_api",
+            Label = "Telegram bot API endpoint",
+            Category = "Exfiltration",
+            Severity = Severity.High,
+            Explanation = "Telegram bot endpoints are often used by stealers to send data out of a victim machine.",
+            Patterns =
+            [
+                new() { Value = @"api\.telegram\.org/bot[A-Za-z0-9:_-]+/send", Kind = PatternKind.Regex },
+                new() { Value = "api.telegram.org/bot" }
+            ]
+        },
+        new()
+        {
+            Id = "common_exfil_endpoint",
+            Label = "Common exfiltration endpoint",
+            Category = "Exfiltration",
+            Severity = Severity.Medium,
+            Explanation = "The jar references a service commonly used to receive or stage stolen data.",
+            Patterns =
+            [
+                new() { Value = "webhook.site", AppliesTo = ".class" },
+                new() { Value = "pastebin.com/api", AppliesTo = ".class" },
+                new() { Value = "hastebin", AppliesTo = ".class" },
+                new() { Value = "requestbin", AppliesTo = ".class" },
+                new() { Value = "ngrok-free.app", AppliesTo = ".class" },
+                new() { Value = "trycloudflare.com", AppliesTo = ".class" }
+            ]
+        },
+        new()
+        {
+            Id = "public_ip_lookup",
+            Label = "Public IP lookup service",
+            Category = "IP Grabber",
+            Severity = Severity.Medium,
+            Explanation = "Public IP lookup APIs are commonly used to identify and exfiltrate a user's external IP address.",
+            Patterns =
+            [
+                new() { Value = "api.ipify.org" },
+                new() { Value = "ifconfig.me" },
+                new() { Value = "icanhazip.com" },
+                new() { Value = "ipinfo.io" },
+                new() { Value = "checkip.amazonaws.com" }
             ]
         },
         new()
@@ -91,6 +150,21 @@ public static class RuleCatalog
                 new() { Value = "AppData\\Local\\Google\\Chrome" },
                 new() { Value = "Microsoft\\Edge\\User Data" },
                 new() { Value = "BraveSoftware\\Brave-Browser\\User Data" }
+            ]
+        },
+        new()
+        {
+            Id = "persistence_paths",
+            Label = "Persistence/startup path",
+            Category = "Persistence",
+            Severity = Severity.High,
+            Explanation = "References to startup folders, Run registry keys, or scheduled tasks may indicate an attempt to persist after reboot.",
+            Patterns =
+            [
+                new() { Value = @"Microsoft\\Windows\\Start Menu\\Programs\\Startup" },
+                new() { Value = @"Software\\Microsoft\\Windows\\CurrentVersion\\Run" },
+                new() { Value = "schtasks" },
+                new() { Value = "Task Scheduler" }
             ]
         },
         new()

@@ -22,6 +22,7 @@ public sealed class JarScanner
         var entryCount = 0;
         var classCount = 0;
         var nestedJarCount = 0;
+        var embeddedExecutables = new List<Evidence>();
 
         using var archive = ZipFile.OpenRead(jarPath);
         foreach (var entry in archive.Entries)
@@ -41,6 +42,11 @@ public sealed class JarScanner
             {
                 nestedJarCount++;
                 documents.Add(new ScanDocument(name, "nested jar"));
+            }
+            else if (IsExecutableOrScript(name))
+            {
+                embeddedExecutables.Add(new Evidence { Source = name, Match = Path.GetExtension(name) });
+                documents.Add(new ScanDocument(name, "embedded executable or script"));
             }
 
             var bytes = ReadEntryBytes(entry);
@@ -70,6 +76,7 @@ public sealed class JarScanner
 
         var activeRules = rules is { Count: > 0 } ? rules : RuleCatalog.DefaultRules;
         var findings = MatchRules(activeRules, documents);
+        findings.AddRange(BuildCompositeFindings(findings));
         if (nestedJarCount > 0)
         {
             findings.Add(new Finding
@@ -82,6 +89,18 @@ public sealed class JarScanner
                 Evidence = [new Evidence { Source = "archive", Match = $"{nestedJarCount} nested jar file(s)" }]
             });
         }
+        if (embeddedExecutables.Count > 0)
+        {
+            findings.Add(new Finding
+            {
+                RuleId = "embedded_executable_or_script",
+                Label = "Embedded executable or script",
+                Category = "Payload / Dropper",
+                Severity = Severity.Medium,
+                Explanation = "Jars can contain resources, but embedded executables or scripts are unusual for normal Minecraft mods/plugins and may be dropped or launched later.",
+                Evidence = embeddedExecutables.Take(MaxEvidencePerRule).ToList()
+            });
+        }
 
         return new ScanResult
         {
@@ -92,6 +111,7 @@ public sealed class JarScanner
             EntryCount = entryCount,
             ClassCount = classCount,
             NestedJarCount = nestedJarCount,
+            EmbeddedExecutableCount = embeddedExecutables.Count,
             Metadata = metadata,
             Findings = findings.OrderByDescending(f => f.Severity).ThenBy(f => f.Category).ToList(),
             Risk = Score(findings)
@@ -157,6 +177,67 @@ public sealed class JarScanner
         return findings;
     }
 
+    private static List<Finding> BuildCompositeFindings(IReadOnlyList<Finding> findings)
+    {
+        var byId = findings.ToDictionary(f => f.RuleId, StringComparer.OrdinalIgnoreCase);
+        var composites = new List<Finding>();
+        byId.TryGetValue("discord_webhook", out var discordWebhook);
+        byId.TryGetValue("telegram_bot_api", out var telegramApi);
+        byId.TryGetValue("common_exfil_endpoint", out var exfilEndpoint);
+
+        if (byId.TryGetValue("discord_token_storage", out var discordStorage) &&
+            (discordWebhook is not null || telegramApi is not null || exfilEndpoint is not null))
+        {
+            composites.Add(new Finding
+            {
+                RuleId = "combo_token_access_and_exfil",
+                Label = "Token storage access with exfiltration path",
+                Category = "Token Logger",
+                Severity = Severity.Critical,
+                Explanation = "The jar contains both local token-storage indicators and a likely outbound exfiltration path. This combination is much stronger than either signal alone.",
+                Evidence = CombineEvidence(discordStorage, discordWebhook, telegramApi, exfilEndpoint)
+            });
+        }
+
+        if (byId.TryGetValue("minecraft_auth_files", out var minecraftAuth) &&
+            (discordWebhook is not null || telegramApi is not null || exfilEndpoint is not null))
+        {
+            composites.Add(new Finding
+            {
+                RuleId = "combo_minecraft_auth_and_exfil",
+                Label = "Minecraft auth access with exfiltration path",
+                Category = "Minecraft Session Stealer",
+                Severity = Severity.Critical,
+                Explanation = "The jar contains Minecraft account/session indicators plus a likely outbound exfiltration path.",
+                Evidence = CombineEvidence(minecraftAuth, discordWebhook, telegramApi, exfilEndpoint)
+            });
+        }
+
+        if (byId.TryGetValue("runtime_loader", out var loader) &&
+            byId.TryGetValue("networking_api", out var network))
+        {
+            composites.Add(new Finding
+            {
+                RuleId = "combo_network_loader",
+                Label = "Network-capable runtime loader",
+                Category = "Loader / Downloader",
+                Severity = Severity.High,
+                Explanation = "The jar contains networking APIs and runtime class-loading indicators. This can be benign, but it is also a common downloader/loader pattern.",
+                Evidence = CombineEvidence(loader, network)
+            });
+        }
+
+        return composites;
+    }
+
+    private static IReadOnlyList<Evidence> CombineEvidence(params Finding?[] findings) =>
+        findings
+            .Where(f => f is not null)
+            .SelectMany(f => f!.Evidence)
+            .DistinctBy(e => $"{e.Source}|{e.Match}")
+            .Take(MaxEvidencePerRule)
+            .ToList();
+
     private static bool IsMatch(string text, RulePattern pattern) =>
         pattern.Kind switch
         {
@@ -211,6 +292,19 @@ public sealed class JarScanner
         name.EndsWith("quilt.mod.json", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("pom.xml", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("pom.properties", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExecutableOrScript(string name)
+    {
+        var extension = Path.GetExtension(name);
+        return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".scr", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".bat", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".vbs", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".js", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string DecodeText(byte[] bytes)
     {
