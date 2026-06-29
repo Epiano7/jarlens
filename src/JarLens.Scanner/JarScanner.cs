@@ -8,6 +8,7 @@ namespace JarLens.Scanner;
 public sealed class JarScanner
 {
     private const int MaxEvidencePerRule = 10;
+    private const int MaxNestedDepth = 4;
 
     public ScanResult Scan(string jarPath, IReadOnlyList<IndicatorRule>? rules = null)
     {
@@ -19,65 +20,21 @@ public sealed class JarScanner
         var file = new FileInfo(jarPath);
         var documents = new List<ScanDocument>();
         var metadata = new List<string>();
-        var entryCount = 0;
-        var classCount = 0;
-        var nestedJarCount = 0;
+        var stats = new ScanStats();
         var embeddedExecutables = new List<Evidence>();
 
         using var archive = ZipFile.OpenRead(jarPath);
-        foreach (var entry in archive.Entries)
+        ProcessArchive(archive, file.Name, 0, documents, metadata, embeddedExecutables, stats);
+
+        if (stats.NestedJarCount > 0)
         {
-            if (string.IsNullOrEmpty(entry.Name))
-            {
-                continue;
-            }
-
-            entryCount++;
-            var name = entry.FullName.Replace('\\', '/');
-            if (name.EndsWith(".class", StringComparison.OrdinalIgnoreCase))
-            {
-                classCount++;
-            }
-            else if (name.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))
-            {
-                nestedJarCount++;
-                documents.Add(new ScanDocument(name, "nested jar"));
-            }
-            else if (IsExecutableOrScript(name))
-            {
-                embeddedExecutables.Add(new Evidence { Source = name, Match = Path.GetExtension(name) });
-                documents.Add(new ScanDocument(name, "embedded executable or script"));
-            }
-
-            var bytes = ReadEntryBytes(entry);
-            if (bytes.Length == 0)
-            {
-                continue;
-            }
-
-            if (IsMetadataFile(name))
-            {
-                var text = DecodeText(bytes);
-                metadata.Add($"{name}:{Environment.NewLine}{TrimForReport(text, 1200)}");
-                documents.Add(new ScanDocument(name, text));
-            }
-
-            var strings = ExtractPrintableStrings(bytes);
-            if (strings.Count > 0)
-            {
-                documents.Add(new ScanDocument(name, string.Join('\n', strings)));
-            }
-        }
-
-        if (nestedJarCount > 0)
-        {
-            documents.Add(new ScanDocument("archive", $"{nestedJarCount} nested jar file(s)"));
+            documents.Add(new ScanDocument("archive", $"{stats.NestedJarCount} nested jar file(s) recursively inspected"));
         }
 
         var activeRules = rules is { Count: > 0 } ? rules : RuleCatalog.DefaultRules;
         var findings = MatchRules(activeRules, documents);
         findings.AddRange(BuildCompositeFindings(findings));
-        if (nestedJarCount > 0)
+        if (stats.NestedJarCount > 0)
         {
             findings.Add(new Finding
             {
@@ -86,7 +43,7 @@ public sealed class JarScanner
                 Category = "Loader / Packaging",
                 Severity = Severity.Low,
                 Explanation = "Nested jars are common in shaded mods/plugins, but they can also hide secondary payloads. Review them when other suspicious indicators are present.",
-                Evidence = [new Evidence { Source = "archive", Match = $"{nestedJarCount} nested jar file(s)" }]
+                Evidence = [new Evidence { Source = "archive", Match = $"{stats.NestedJarCount} nested jar file(s) recursively inspected" }]
             });
         }
         if (embeddedExecutables.Count > 0)
@@ -108,14 +65,96 @@ public sealed class JarScanner
             FilePath = file.FullName,
             Sha256 = ComputeSha256(jarPath),
             SizeBytes = file.Length,
-            EntryCount = entryCount,
-            ClassCount = classCount,
-            NestedJarCount = nestedJarCount,
+            EntryCount = stats.EntryCount,
+            ClassCount = stats.ClassCount,
+            NestedJarCount = stats.NestedJarCount,
             EmbeddedExecutableCount = embeddedExecutables.Count,
             Metadata = metadata,
             Findings = findings.OrderByDescending(f => f.Severity).ThenBy(f => f.Category).ToList(),
             Risk = Score(findings)
         };
+    }
+
+    private static void ProcessArchive(
+        ZipArchive archive,
+        string sourcePrefix,
+        int depth,
+        List<ScanDocument> documents,
+        List<string> metadata,
+        List<Evidence> embeddedExecutables,
+        ScanStats stats)
+    {
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue;
+            }
+
+            stats.EntryCount++;
+            var name = entry.FullName.Replace('\\', '/');
+            var sourceName = sourcePrefix + "!/" + name;
+            var bytes = ReadEntryBytes(entry);
+
+            if (name.EndsWith(".class", StringComparison.OrdinalIgnoreCase))
+            {
+                stats.ClassCount++;
+            }
+            else if (name.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))
+            {
+                stats.NestedJarCount++;
+                documents.Add(new ScanDocument(sourceName, "nested jar"));
+
+                if (depth < MaxNestedDepth && bytes.Length > 0)
+                {
+                    TryProcessNestedJar(bytes, sourceName, depth + 1, documents, metadata, embeddedExecutables, stats);
+                }
+            }
+            else if (IsExecutableOrScript(name))
+            {
+                embeddedExecutables.Add(new Evidence { Source = sourceName, Match = Path.GetExtension(name) });
+                documents.Add(new ScanDocument(sourceName, "embedded executable or script"));
+            }
+
+            if (bytes.Length == 0)
+            {
+                continue;
+            }
+
+            if (IsMetadataFile(name))
+            {
+                var text = DecodeText(bytes);
+                metadata.Add($"{sourceName}:{Environment.NewLine}{TrimForReport(text, 1200)}");
+                documents.Add(new ScanDocument(sourceName, text));
+            }
+
+            var strings = ExtractPrintableStrings(bytes);
+            if (strings.Count > 0)
+            {
+                documents.Add(new ScanDocument(sourceName, string.Join('\n', strings)));
+            }
+        }
+    }
+
+    private static void TryProcessNestedJar(
+        byte[] bytes,
+        string sourceName,
+        int depth,
+        List<ScanDocument> documents,
+        List<string> metadata,
+        List<Evidence> embeddedExecutables,
+        ScanStats stats)
+    {
+        try
+        {
+            using var memory = new MemoryStream(bytes);
+            using var nestedArchive = new ZipArchive(memory, ZipArchiveMode.Read, leaveOpen: false);
+            ProcessArchive(nestedArchive, sourceName, depth, documents, metadata, embeddedExecutables, stats);
+        }
+        catch (InvalidDataException)
+        {
+            documents.Add(new ScanDocument(sourceName, "nested jar could not be opened"));
+        }
     }
 
     private static List<Finding> MatchRules(IReadOnlyList<IndicatorRule> rules, IReadOnlyList<ScanDocument> documents)
@@ -359,4 +398,11 @@ public sealed class JarScanner
         value.Length <= maxLength ? value : value[..maxLength] + "\n...";
 
     private sealed record ScanDocument(string Source, string Text);
+
+    private sealed class ScanStats
+    {
+        public int EntryCount { get; set; }
+        public int ClassCount { get; set; }
+        public int NestedJarCount { get; set; }
+    }
 }
