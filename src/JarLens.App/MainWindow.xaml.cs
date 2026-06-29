@@ -1,5 +1,12 @@
 using JarLens.Scanner;
 using Microsoft.Win32;
+using System.IO;
+using System.IO.Compression;
+using System.Reflection;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,6 +16,7 @@ namespace JarLens.App;
 public partial class MainWindow : Window
 {
     private readonly JarScanner scanner = new();
+    private ScanResult? currentResult;
     private ThemePalette palette = ThemePalette.Light;
 
     public MainWindow()
@@ -18,6 +26,7 @@ public partial class MainWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        VersionText.Text = "v" + AppVersion();
         ApplyTheme(ThemePalette.FromSystem());
     }
 
@@ -107,6 +116,7 @@ public partial class MainWindow : Window
         try
         {
             var result = scanner.Scan(path);
+            currentResult = result;
             SelectedFileText.Text = result.FilePath;
             RiskText.Text = result.Risk.Level;
             RiskScoreText.Text = $"Score: {result.Risk.Score}";
@@ -114,19 +124,57 @@ public partial class MainWindow : Window
             RiskMeter.Value = Math.Clamp(result.Risk.Score, 0, 100);
             RiskMeter.Foreground = RiskBrush(result.Risk.Level);
             FindingsList.ItemsSource = result.Findings.Select(FindingView.FromFinding).ToList();
+            ExportBundleButton.IsEnabled = true;
             ReportText.Text = FormatReport(result);
             DetailTitleText.Text = "Report";
             DetailSubtitleText.Text = result.Risk.Verdict;
         }
         catch (Exception ex)
         {
+            currentResult = null;
             RiskText.Text = "Error";
             RiskScoreText.Text = "Score: -";
             RiskMeter.Value = 0;
             FindingsList.ItemsSource = null;
+            ExportBundleButton.IsEnabled = false;
             ReportText.Text = ex.Message;
             DetailTitleText.Text = "Scan error";
             DetailSubtitleText.Text = "The jar could not be inspected.";
+        }
+    }
+
+    private void ExportBundle_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentResult is null)
+        {
+            return;
+        }
+
+        var safeName = SafeFileName(Path.GetFileNameWithoutExtension(currentResult.FileName));
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Zip archive (*.zip)|*.zip",
+            FileName = $"JarLens-triage-{safeName}-{currentResult.Sha256[..8]}.zip",
+            Title = "Export safe triage bundle"
+        };
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            ExportTriageBundle(currentResult, dialog.FileName);
+            MessageBox.Show(this,
+                "Triage bundle exported. It contains reports, metadata, and file-tree hashes, but not the jar or class bytecode.",
+                "JarLens export",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Export failed", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -178,6 +226,105 @@ public partial class MainWindow : Window
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static void ExportTriageBundle(ScanResult result, string outputPath)
+    {
+        if (File.Exists(outputPath))
+        {
+            File.Delete(outputPath);
+        }
+
+        using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
+        AddText(archive, "report.txt", RedactSensitive(FormatReport(result)));
+        AddText(archive, "report.json", RedactSensitive(JsonSerializer.Serialize(result, JsonOptions())));
+        AddText(archive, "file-tree.txt", BuildFileTree(result));
+        AddText(archive, "file-tree.json", JsonSerializer.Serialize(result.Entries, JsonOptions()));
+        AddText(archive, "submission.md", BuildSubmission(result));
+
+        for (var i = 0; i < result.Metadata.Count; i++)
+        {
+            AddText(archive, $"metadata/metadata-{i + 1:D2}.txt", RedactSensitive(result.Metadata[i]));
+        }
+    }
+
+    private static string BuildSubmission(ScanResult result)
+    {
+        var topFindings = result.Findings.Take(8).Select(f => $"- {f.Severity}: {f.Label} ({f.RuleId})");
+        return string.Join(Environment.NewLine,
+        [
+            "# JarLens Sample Report",
+            "",
+            "- Label: Confirmed RAT / Confirmed token logger / Suspected malicious / False positive / Benign / Unsure",
+            $"- Jar name: `{result.FileName}`",
+            $"- SHA256: `{result.Sha256}`",
+            $"- JarLens version: `v{AppVersion()}`",
+            $"- Risk: `{result.Risk.Level} ({result.Risk.Score})`",
+            $"- Size: `{result.SizeBytes:N0} bytes`",
+            $"- Entries/classes/nested jars: `{result.EntryCount}` / `{result.ClassCount}` / `{result.NestedJarCount}`",
+            "",
+            "## Top Findings",
+            string.Join(Environment.NewLine, topFindings),
+            "",
+            "## Notes",
+            "Add anything known about where the jar came from, whether it is confirmed malicious, or what JarLens got wrong.",
+            "",
+            "This triage bundle does not include the jar, class bytecode, or full binary resources."
+        ]);
+    }
+
+    private static string BuildFileTree(ScanResult result)
+    {
+        var lines = new List<string> { result.FileName };
+        foreach (var entry in result.Entries.OrderBy(e => e.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            var path = entry.Path.StartsWith(result.FileName + "!/", StringComparison.OrdinalIgnoreCase)
+                ? entry.Path[(result.FileName.Length + 2)..]
+                : entry.Path;
+            var depth = path.Count(c => c == '/' || c == '!');
+            lines.Add($"{new string(' ', Math.Min(depth, 12) * 2)}- {path} [{entry.Type}, {entry.SizeBytes:N0} bytes, sha256:{entry.Sha256[..12]}...]");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static void AddText(ZipArchive archive, string path, string text)
+    {
+        var entry = archive.CreateEntry(path);
+        using var stream = entry.Open();
+        using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+        writer.Write(text);
+    }
+
+    private static string RedactSensitive(string value)
+    {
+        value = Regex.Replace(value, @"(discord(?:app)?\.com/api/webhooks/)[A-Za-z0-9_\-/]+", "$1[REDACTED]", RegexOptions.IgnoreCase);
+        value = Regex.Replace(value, @"mfa\.[A-Za-z0-9_-]{20,}", "mfa.[REDACTED]", RegexOptions.IgnoreCase);
+        value = Regex.Replace(value, @"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}", "[DISCORD_TOKEN_REDACTED]", RegexOptions.IgnoreCase);
+        value = Regex.Replace(value, @"C:\\Users\\[^\\\r\n]+", @"C:\Users\[REDACTED]", RegexOptions.IgnoreCase);
+        return value;
+    }
+
+    private static JsonSerializerOptions JsonOptions() => new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private static string AppVersion()
+    {
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        return version is null ? "0.0.0" : $"{version.Major}.{version.Minor}.{version.Build}";
+    }
+
+    private static string SafeFileName(string value)
+    {
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+        {
+            value = value.Replace(invalid, '-');
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? "jar" : value;
     }
 
     private static string FormatFinding(Finding finding)

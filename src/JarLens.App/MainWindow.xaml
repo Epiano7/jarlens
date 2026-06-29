@@ -15,11 +15,15 @@
 
         <DockPanel Grid.Row="0" LastChildFill="True">
             <StackPanel>
-                <TextBlock x:Name="TitleText" Text="JarLens" FontSize="32" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="TitleText" Text="JarLens" FontSize="32" FontWeight="SemiBold" />
+                    <TextBlock x:Name="VersionText" Text="v0.0.0" Margin="10,13,0,0" FontSize="13" />
+                </StackPanel>
                 <TextBlock x:Name="SubtitleText" Text="Static malware triage for Minecraft jars and Java plugins." Margin="0,4,0,0" FontSize="14" />
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,6,0,0">
                 <Button Content="Check updates" Width="128" Height="36" Margin="0,0,10,0" Click="CheckUpdates_Click" />
+                <Button x:Name="ExportBundleButton" Content="Export bundle" Width="128" Height="36" Margin="0,0,10,0" Click="ExportBundle_Click" IsEnabled="False" />
                 <Button Content="Open jar" Width="116" Height="36" Click="OpenJar_Click" />
             </StackPanel>
         </DockPanel>
