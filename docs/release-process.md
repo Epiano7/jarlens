@@ -4,6 +4,10 @@ Use a real Markdown notes file for release bodies. Do not pass notes with escape
 `\n` sequences on the command line, because GitHub will render those as literal
 text.
 
+Keep public release notes user-facing. Mention shipped features, fixes, and
+behavior changes, but keep local verification details, private sample names, and
+work-in-progress context out of public changelogs.
+
 ## Manual release notes
 
 Create a temporary notes file:
