@@ -6,6 +6,7 @@ var tempJar = Path.Combine(Path.GetTempPath(), $"jarlens-test-{Guid.NewGuid():N}
 var falsePositiveJar = Path.Combine(Path.GetTempPath(), $"jarlens-fp-test-{Guid.NewGuid():N}.jar");
 var comboJar = Path.Combine(Path.GetTempPath(), $"jarlens-combo-test-{Guid.NewGuid():N}.jar");
 var nestedComboJar = Path.Combine(Path.GetTempPath(), $"jarlens-nested-combo-test-{Guid.NewGuid():N}.jar");
+var ratPatternJar = Path.Combine(Path.GetTempPath(), $"jarlens-rat-pattern-test-{Guid.NewGuid():N}.jar");
 try
 {
     using (var archive = ZipFile.Open(tempJar, ZipArchiveMode.Create))
@@ -71,6 +72,44 @@ try
     var nestedComboResult = new JarScanner().Scan(nestedComboJar);
     Assert(nestedComboResult.NestedJarCount == 1, "Expected nested jar count.");
     Assert(nestedComboResult.Findings.Any(f => f.RuleId == "combo_token_access_and_exfil" && f.Severity == Severity.Critical), "Expected critical combo token/exfil finding inside nested jar.");
+
+    using (var archive = ZipFile.Open(ratPatternJar, ZipArchiveMode.Create))
+    {
+        var manifest = archive.CreateEntry("META-INF/MANIFEST.MF");
+        await using (var stream = manifest.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("Manifest-Version: 1.0\nMain-Class: com.github.du_npiq_zf\n"));
+        }
+
+        var modJson = archive.CreateEntry("fabric.mod.json");
+        await using (var stream = modJson.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("""
+                {
+                  "schemaVersion": 1,
+                  "id": "voicechat",
+                  "name": "Simple Voice Chat",
+                  "entrypoints": {
+                    "main": [
+                      "de.maxhenkel.voicechat.FabricVoicechatMod",
+                      "com.github.fjiqlt4"
+                    ]
+                  }
+                }
+                """));
+        }
+
+        var ratClass = archive.CreateEntry("com/github/fjiqlt4.class");
+        await using (var stream = ratClass.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("java/lang/ProcessBuilder java/net/URL java/util/Base64"));
+        }
+    }
+
+    var ratPatternResult = new JarScanner().Scan(ratPatternJar);
+    Assert(ratPatternResult.Findings.Any(f => f.RuleId == "combo_process_network_crypto_same_class" && f.Severity == Severity.Critical), "Expected critical process/network/crypto same-class finding.");
+    Assert(ratPatternResult.Findings.Any(f => f.RuleId == "suspicious_fabric_entrypoint" && f.Severity == Severity.High), "Expected suspicious Fabric entrypoint finding.");
+    Assert(ratPatternResult.Findings.Any(f => f.RuleId == "suspicious_manifest_main_class"), "Expected suspicious manifest main class finding.");
     Console.WriteLine("JarLens.Scanner.Tests passed.");
     return 0;
 }
@@ -99,6 +138,11 @@ finally
     if (File.Exists(nestedComboJar))
     {
         File.Delete(nestedComboJar);
+    }
+
+    if (File.Exists(ratPatternJar))
+    {
+        File.Delete(ratPatternJar);
     }
 }
 
