@@ -29,7 +29,13 @@ jobs:
           } | Set-Content artifacts/JarLens-win-x64/SHA256SUMS.txt
       - name: Archive
         shell: pwsh
-        run: Compress-Archive -Path artifacts/JarLens-win-x64/* -DestinationPath artifacts/JarLens-win-x64.zip
+        run: |
+          Compress-Archive -Path artifacts/JarLens-win-x64/* -DestinationPath artifacts/JarLens-win-x64.zip
+          $zipHash = (Get-FileHash -Algorithm SHA256 artifacts/JarLens-win-x64.zip).Hash
+          "$zipHash  JarLens-win-x64.zip" | Set-Content artifacts/JarLens-win-x64.zip.sha256
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/JarLens-win-x64.zip
+          files: |
+            artifacts/JarLens-win-x64.zip
+            artifacts/JarLens-win-x64.zip.sha256
+            artifacts/JarLens-win-x64/SHA256SUMS.txt
