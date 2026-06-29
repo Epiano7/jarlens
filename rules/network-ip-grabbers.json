@@ -6,7 +6,7 @@
     "severity": "Low",
     "explanation": "Network APIs are not malicious on their own, but unexpected outbound traffic from a mod/plugin deserves review.",
     "patterns": [
-      { "value": "java/net/URL", "appliesTo": ".class" },
+      { "value": "java/net/URL(?!ClassLoader)", "kind": "Regex", "appliesTo": ".class" },
       { "value": "java/net/HttpURLConnection", "appliesTo": ".class" },
       { "value": "java/net/Socket", "appliesTo": ".class" },
       { "value": "java/net/http/HttpClient", "appliesTo": ".class" },

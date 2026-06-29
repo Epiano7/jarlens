@@ -55,8 +55,8 @@ public static class RuleCatalog
             Explanation = "The jar contains a string shaped like a Discord token. This may be a hardcoded test token, stolen token, or token-pattern handling code.",
             Patterns =
             [
-                new() { Value = @"mfa\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex },
-                new() { Value = @"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex }
+                new() { Value = @"mfa\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex, AppliesTo = ".class" },
+                new() { Value = @"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}", Kind = PatternKind.Regex, AppliesTo = ".class" }
             ]
         },
         new()
@@ -124,9 +124,9 @@ public static class RuleCatalog
             Id = "minecraft_auth_files",
             Label = "Minecraft account/session file access",
             Category = "Minecraft Session Stealer",
-            Severity = Severity.High,
+            Severity = Severity.Medium,
             Explanation = "Minecraft launcher auth files may contain account/session material useful to steal accounts or sessions.",
-            FalsePositiveHint = "Generic .minecraft mentions are common in legitimate mods, so this rule only looks for account/session file names and token strings.",
+            FalsePositiveHint = "OAuth and account-management mods can legitimately contain accessToken/clientToken wording. This becomes much stronger when paired with an exfiltration endpoint.",
             Patterns =
             [
                 new() { Value = "launcher_accounts.json" },
@@ -192,7 +192,7 @@ public static class RuleCatalog
             Explanation = "Network APIs are not malicious on their own, but unexpected outbound traffic from a mod/plugin deserves review.",
             Patterns =
             [
-                new() { Value = "java/net/URL", AppliesTo = ".class" },
+                new() { Value = @"java/net/URL(?!ClassLoader)", Kind = PatternKind.Regex, AppliesTo = ".class" },
                 new() { Value = "java/net/HttpURLConnection", AppliesTo = ".class" },
                 new() { Value = "java/net/Socket", AppliesTo = ".class" },
                 new() { Value = "java/net/http/HttpClient", AppliesTo = ".class" },

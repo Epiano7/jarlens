@@ -7,6 +7,7 @@ var falsePositiveJar = Path.Combine(Path.GetTempPath(), $"jarlens-fp-test-{Guid.
 var comboJar = Path.Combine(Path.GetTempPath(), $"jarlens-combo-test-{Guid.NewGuid():N}.jar");
 var nestedComboJar = Path.Combine(Path.GetTempPath(), $"jarlens-nested-combo-test-{Guid.NewGuid():N}.jar");
 var ratPatternJar = Path.Combine(Path.GetTempPath(), $"jarlens-rat-pattern-test-{Guid.NewGuid():N}.jar");
+var impersonatedJar = Path.Combine(Path.GetTempPath(), $"Krypton-1.21.11+5.1.1-{Guid.NewGuid():N}.jar");
 try
 {
     using (var archive = ZipFile.Open(tempJar, ZipArchiveMode.Create))
@@ -110,6 +111,46 @@ try
     Assert(ratPatternResult.Findings.Any(f => f.RuleId == "combo_process_network_crypto_same_class" && f.Severity == Severity.Critical), "Expected critical process/network/crypto same-class finding.");
     Assert(ratPatternResult.Findings.Any(f => f.RuleId == "suspicious_fabric_entrypoint" && f.Severity == Severity.High), "Expected suspicious Fabric entrypoint finding.");
     Assert(ratPatternResult.Findings.Any(f => f.RuleId == "suspicious_manifest_main_class"), "Expected suspicious manifest main class finding.");
+
+    using (var archive = ZipFile.Open(impersonatedJar, ZipArchiveMode.Create))
+    {
+        var modJson = archive.CreateEntry("fabric.mod.json");
+        await using (var stream = modJson.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("""
+                {
+                  "schemaVersion": 1,
+                  "id": "notenoughanimations",
+                  "name": "NotEnoughAnimations",
+                  "contact": {
+                    "homepage": "https://modrinth.com/mod/not-enough-animations",
+                    "sources": "https://github.com/tr7zw/NotEnoughAnimations"
+                  },
+                  "jars": [
+                    { "file": "META-INF/jars/TRansition.jar" }
+                  ]
+                }
+                """));
+        }
+
+        using var nestedPayload = new MemoryStream();
+        using (var nestedArchive = new ZipArchive(nestedPayload, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var libraryClass = nestedArchive.CreateEntry("dev/tr7zw/libsentry/HttpConnection.class");
+            await using var stream = libraryClass.Open();
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("java/net/URL java/util/Base64"));
+        }
+
+        nestedPayload.Position = 0;
+        var nestedEntry = archive.CreateEntry("META-INF/jars/TRansition.jar");
+        await using var nestedEntryStream = nestedEntry.Open();
+        await nestedPayload.CopyToAsync(nestedEntryStream);
+    }
+
+    var impersonatedResult = new JarScanner().Scan(impersonatedJar);
+    Assert(impersonatedResult.Findings.Any(f => f.RuleId == "metadata_identity_mismatch" && f.Severity == Severity.Medium), "Expected metadata identity mismatch finding.");
+    Assert(impersonatedResult.Findings.Any(f => f.RuleId == "combo_impersonation_nested_network_code" && f.Severity == Severity.High), "Expected high-risk impersonation plus nested network-code finding.");
+    Assert(impersonatedResult.Risk.Level is "High", "Expected impersonated nested network-capable jar to be high risk.");
     Console.WriteLine("JarLens.Scanner.Tests passed.");
     return 0;
 }
@@ -143,6 +184,11 @@ finally
     if (File.Exists(ratPatternJar))
     {
         File.Delete(ratPatternJar);
+    }
+
+    if (File.Exists(impersonatedJar))
+    {
+        File.Delete(impersonatedJar);
     }
 }
 
