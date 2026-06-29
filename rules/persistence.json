@@ -1,0 +1,15 @@
+[
+  {
+    "id": "persistence_paths",
+    "label": "Persistence/startup path",
+    "category": "Persistence",
+    "severity": "High",
+    "explanation": "References to startup folders, Run registry keys, or scheduled tasks may indicate an attempt to persist after reboot.",
+    "patterns": [
+      { "value": "Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Startup" },
+      { "value": "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run" },
+      { "value": "schtasks" },
+      { "value": "Task Scheduler" }
+    ]
+  }
+]

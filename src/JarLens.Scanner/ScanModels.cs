@@ -9,6 +9,7 @@ public sealed record ScanResult
     public int EntryCount { get; init; }
     public int ClassCount { get; init; }
     public int NestedJarCount { get; init; }
+    public int EmbeddedExecutableCount { get; init; }
     public IReadOnlyList<string> Metadata { get; init; } = [];
     public IReadOnlyList<Finding> Findings { get; init; } = [];
     public required RiskSummary Risk { get; init; }

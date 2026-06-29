@@ -15,6 +15,32 @@
     ]
   },
   {
+    "id": "telegram_bot_api",
+    "label": "Telegram bot API endpoint",
+    "category": "Exfiltration",
+    "severity": "High",
+    "explanation": "Telegram bot endpoints are often used by stealers to send data out of a victim machine.",
+    "patterns": [
+      { "value": "api\\.telegram\\.org/bot[A-Za-z0-9:_-]+/send", "kind": "Regex" },
+      { "value": "api.telegram.org/bot" }
+    ]
+  },
+  {
+    "id": "common_exfil_endpoint",
+    "label": "Common exfiltration endpoint",
+    "category": "Exfiltration",
+    "severity": "Medium",
+    "explanation": "The jar references a service commonly used to receive or stage stolen data.",
+    "patterns": [
+      { "value": "webhook.site", "appliesTo": ".class" },
+      { "value": "pastebin.com/api", "appliesTo": ".class" },
+      { "value": "hastebin", "appliesTo": ".class" },
+      { "value": "requestbin", "appliesTo": ".class" },
+      { "value": "ngrok-free.app", "appliesTo": ".class" },
+      { "value": "trycloudflare.com", "appliesTo": ".class" }
+    ]
+  },
+  {
     "id": "public_ip_lookup",
     "label": "Public IP lookup service",
     "category": "IP Grabber",
@@ -24,7 +50,8 @@
       { "value": "api.ipify.org" },
       { "value": "ifconfig.me" },
       { "value": "icanhazip.com" },
-      { "value": "ipinfo.io" }
+      { "value": "ipinfo.io" },
+      { "value": "checkip.amazonaws.com" }
     ]
   }
 ]

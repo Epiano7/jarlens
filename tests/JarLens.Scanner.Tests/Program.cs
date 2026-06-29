@@ -4,6 +4,7 @@ using System.Text;
 
 var tempJar = Path.Combine(Path.GetTempPath(), $"jarlens-test-{Guid.NewGuid():N}.jar");
 var falsePositiveJar = Path.Combine(Path.GetTempPath(), $"jarlens-fp-test-{Guid.NewGuid():N}.jar");
+var comboJar = Path.Combine(Path.GetTempPath(), $"jarlens-combo-test-{Guid.NewGuid():N}.jar");
 try
 {
     using (var archive = ZipFile.Open(tempJar, ZipArchiveMode.Create))
@@ -37,6 +38,18 @@ try
 
     var falsePositiveResult = new JarScanner().Scan(falsePositiveJar);
     Assert(falsePositiveResult.Findings.All(f => f.Severity < Severity.High), "Generic library strings should not create high-risk findings.");
+
+    using (var archive = ZipFile.Open(comboJar, ZipArchiveMode.Create))
+    {
+        var stealerClass = archive.CreateEntry("demo/Combo.class");
+        await using (var stream = stealerClass.Open())
+        {
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("Local State leveldb discord.com/api/webhooks"));
+        }
+    }
+
+    var comboResult = new JarScanner().Scan(comboJar);
+    Assert(comboResult.Findings.Any(f => f.RuleId == "combo_token_access_and_exfil" && f.Severity == Severity.Critical), "Expected critical combo token/exfil finding.");
     Console.WriteLine("JarLens.Scanner.Tests passed.");
     return 0;
 }
@@ -55,6 +68,11 @@ finally
     if (File.Exists(falsePositiveJar))
     {
         File.Delete(falsePositiveJar);
+    }
+
+    if (File.Exists(comboJar))
+    {
+        File.Delete(comboJar);
     }
 }
 

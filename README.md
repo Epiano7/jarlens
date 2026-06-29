@@ -16,6 +16,7 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 
 - Portable Windows WPF app with drag-and-drop jar scanning.
 - CLI scanner for scripts and CI.
+- Directory scan mode that ranks a folder of jars by risk.
 - SHA-256 fingerprinting.
 - Manifest, Bukkit/Paper `plugin.yml`, Forge/Fabric metadata extraction.
 - Nested jar detection.
@@ -49,6 +50,12 @@ To scan with the editable catalog in `rules/`:
 
 ```powershell
 dotnet run --project src/JarLens.Cli -- "C:\path\to\file.jar" rules
+```
+
+To scan and rank every jar in a folder:
+
+```powershell
+dotnet run --project src/JarLens.Cli -- "C:\path\to\jar-folder" rules
 ```
 
 ## Portable release
@@ -87,3 +94,7 @@ Risk levels:
 ## Important limitation
 
 Static analysis catches many common stealers and loaders, but it cannot prove a jar is safe. Obfuscated or staged malware may require manual reverse engineering or sandbox execution in an isolated VM.
+
+## Handling suspicious jars
+
+Do not run unknown jars on your main machine. See [docs/handling-suspicious-jars.md](docs/handling-suspicious-jars.md).
