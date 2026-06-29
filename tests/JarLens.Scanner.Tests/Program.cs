@@ -28,6 +28,7 @@ try
     var result = new JarScanner().Scan(tempJar);
     Assert(result.Findings.Any(f => f.RuleId == "discord_webhook"), "Expected Discord webhook finding.");
     Assert(result.Findings.Any(f => f.RuleId == "networking_api"), "Expected networking API finding.");
+    Assert(result.Entries.Any(e => e.Path.EndsWith("demo/Suspicious.class") && e.Type == "class" && e.Sha256.Length == 64), "Expected safe entry inventory with class hash.");
     Assert(result.Risk.Level is "High", "Expected high risk.");
 
     using (var archive = ZipFile.Open(falsePositiveJar, ZipArchiveMode.Create))

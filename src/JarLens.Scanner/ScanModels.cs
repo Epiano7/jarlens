@@ -10,9 +10,18 @@ public sealed record ScanResult
     public int ClassCount { get; init; }
     public int NestedJarCount { get; init; }
     public int EmbeddedExecutableCount { get; init; }
+    public IReadOnlyList<JarEntryInfo> Entries { get; init; } = [];
     public IReadOnlyList<string> Metadata { get; init; } = [];
     public IReadOnlyList<Finding> Findings { get; init; } = [];
     public required RiskSummary Risk { get; init; }
+}
+
+public sealed record JarEntryInfo
+{
+    public required string Path { get; init; }
+    public required string Type { get; init; }
+    public long SizeBytes { get; init; }
+    public required string Sha256 { get; init; }
 }
 
 public sealed record Finding

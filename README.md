@@ -23,6 +23,7 @@ JarLens is built for quick, explainable review of suspicious `.jar` files before
 - Recursive nested jar inspection.
 - Rule-based detection for token loggers, Minecraft session stealers, credential paths, IP grabbers, loaders, process execution, and obfuscation helpers.
 - Human-readable findings with category, severity, explanation, and evidence.
+- Safe triage bundle export with reports, metadata, file tree, and per-entry hashes, without bundling jar bytecode.
 - One-click GitHub Releases updater with SHA-256 verification.
 - System-aware light/dark theme.
 - Risk meter with visible score thresholds.
@@ -58,6 +59,10 @@ To scan and rank every jar in a folder:
 ```powershell
 dotnet run --project src/JarLens.Cli -- "C:\path\to\jar-folder" rules
 ```
+
+## Safe triage bundles
+
+After scanning a jar in the desktop app, click **Export bundle** to create a zip that can be shared for review without sending the jar itself. The bundle includes `report.txt`, `report.json`, `file-tree.txt`, `file-tree.json`, metadata snippets, and a `submission.md` template. It does not include the original jar, class bytecode, or full binary resources.
 
 ## Portable release
 

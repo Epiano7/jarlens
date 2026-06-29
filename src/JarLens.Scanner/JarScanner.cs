@@ -22,9 +22,10 @@ public sealed class JarScanner
         var metadata = new List<string>();
         var stats = new ScanStats();
         var embeddedExecutables = new List<Evidence>();
+        var entries = new List<JarEntryInfo>();
 
         using var archive = ZipFile.OpenRead(jarPath);
-        ProcessArchive(archive, file.Name, 0, documents, metadata, embeddedExecutables, stats);
+        ProcessArchive(archive, file.Name, 0, documents, metadata, embeddedExecutables, stats, entries);
 
         if (stats.NestedJarCount > 0)
         {
@@ -70,6 +71,7 @@ public sealed class JarScanner
             ClassCount = stats.ClassCount,
             NestedJarCount = stats.NestedJarCount,
             EmbeddedExecutableCount = embeddedExecutables.Count,
+            Entries = entries,
             Metadata = metadata,
             Findings = findings.OrderByDescending(f => f.Severity).ThenBy(f => f.Category).ToList(),
             Risk = Score(findings)
@@ -83,7 +85,8 @@ public sealed class JarScanner
         List<ScanDocument> documents,
         List<string> metadata,
         List<Evidence> embeddedExecutables,
-        ScanStats stats)
+        ScanStats stats,
+        List<JarEntryInfo> entries)
     {
         foreach (var entry in archive.Entries)
         {
@@ -96,6 +99,13 @@ public sealed class JarScanner
             var name = entry.FullName.Replace('\\', '/');
             var sourceName = sourcePrefix + "!/" + name;
             var bytes = ReadEntryBytes(entry);
+            entries.Add(new JarEntryInfo
+            {
+                Path = sourceName,
+                Type = EntryType(name),
+                SizeBytes = entry.Length,
+                Sha256 = Convert.ToHexString(SHA256.HashData(bytes))
+            });
 
             if (name.EndsWith(".class", StringComparison.OrdinalIgnoreCase))
             {
@@ -108,7 +118,7 @@ public sealed class JarScanner
 
                 if (depth < MaxNestedDepth && bytes.Length > 0)
                 {
-                    TryProcessNestedJar(bytes, sourceName, depth + 1, documents, metadata, embeddedExecutables, stats);
+                    TryProcessNestedJar(bytes, sourceName, depth + 1, documents, metadata, embeddedExecutables, stats, entries);
                 }
             }
             else if (IsExecutableOrScript(name))
@@ -149,13 +159,14 @@ public sealed class JarScanner
         List<ScanDocument> documents,
         List<string> metadata,
         List<Evidence> embeddedExecutables,
-        ScanStats stats)
+        ScanStats stats,
+        List<JarEntryInfo> entries)
     {
         try
         {
             using var memory = new MemoryStream(bytes);
             using var nestedArchive = new ZipArchive(memory, ZipArchiveMode.Read, leaveOpen: false);
-            ProcessArchive(nestedArchive, sourceName, depth, documents, metadata, embeddedExecutables, stats);
+            ProcessArchive(nestedArchive, sourceName, depth, documents, metadata, embeddedExecutables, stats, entries);
         }
         catch (InvalidDataException)
         {
@@ -549,6 +560,31 @@ public sealed class JarScanner
         name.EndsWith("quilt.mod.json", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("pom.xml", StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith("pom.properties", StringComparison.OrdinalIgnoreCase);
+
+    private static string EntryType(string name)
+    {
+        if (IsMetadataFile(name))
+        {
+            return "metadata";
+        }
+
+        if (name.EndsWith(".class", StringComparison.OrdinalIgnoreCase))
+        {
+            return "class";
+        }
+
+        if (name.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))
+        {
+            return "nested-jar";
+        }
+
+        if (IsExecutableOrScript(name))
+        {
+            return "executable-or-script";
+        }
+
+        return "resource";
+    }
 
     private static bool IsExecutableOrScript(string name)
     {
